@@ -1,0 +1,49 @@
+# Values for the kube-prometheus-stack chart (Prometheus Operator, Prometheus,
+# Alertmanager, Grafana, node-exporter and kube-state-metrics).
+# The Makefile installs it as the release "kps" in the namespace "monitoring".
+
+# A fixed name gives predictable Service names:
+# kps-prometheus (Prometheus) and kps-grafana (Grafana).
+fullnameOverride: kps
+
+# On kind these control plane components listen on localhost only, so
+# Prometheus cannot scrape them and their default alerts would always fire.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Alloy pushes the OTLP metrics here with remote write.
+    enableRemoteWriteReceiver: true
+    # Pick up PrometheusRule, ServiceMonitor and PodMonitor objects from any
+    # Helm release, not only objects labelled with this release name.
+    # This is how the separate slo-rules chart is loaded.
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    retention: 2d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+
+grafana:
+  # The Secret "grafana-admin" is created by "make secret" with a random
+  # password, so no credentials are stored in this repository.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      access: proxy
+      url: http://tempo.monitoring.svc.cluster.local:3200

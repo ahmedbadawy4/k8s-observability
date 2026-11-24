@@ -1,0 +1,43 @@
+# Extra labels added to the PrometheusRule object.
+labels: {}
+
+alerting:
+  # Severity label of the two fast burn alerts (1h and 6h long windows).
+  pageSeverity: critical
+  # Severity label of the two slow burn alerts (1d and 3d long windows).
+  ticketSeverity: warning
+
+# One entry per service level objective (SLO). The alert thresholds assume a
+# 30 day objective window.
+#
+#   name           Unique name. It becomes the value of the "slo" label.
+#   description    Free text used in the alert description.
+#   errorBudget    Allowed error ratio. A 99.9% objective is 0.001.
+#   errorRatioQuery  PromQL that returns the ratio of bad events to all events
+#                  as one series. Write __WINDOW__ where the range goes. The
+#                  chart replaces it with 5m, 30m, 1h, 2h, 6h, 1d and 3d.
+#   labels         Optional extra labels added to the recorded series and alerts.
+slos:
+  # Works on any cluster that runs kube-prometheus-stack, because the Kubernetes
+  # API server exposes apiserver_request_total.
+  - name: apiserver-availability
+    description: Share of Kubernetes API server requests that return a 5xx status code.
+    errorBudget: 0.001
+    # "or vector(0)" makes the ratio 0 instead of "no data" while there are no errors.
+    errorRatioQuery: |-
+      (sum(rate(apiserver_request_total{code=~"5.."}[__WINDOW__])) or vector(0))
+      /
+      sum(rate(apiserver_request_total[__WINDOW__]))
+    labels:
+      team: platform
+
+  # Example for a service that sends the OpenTelemetry HTTP server metrics
+  # through Alloy. Copy it and change the service name.
+  #
+  # - name: checkout-availability
+  #   description: Share of checkout requests that return a 5xx status code.
+  #   errorBudget: 0.001
+  #   errorRatioQuery: |-
+  #     sum(rate(http_server_request_duration_seconds_count{job="checkout",http_response_status_code=~"5.."}[__WINDOW__]))
+  #     /
+  #     sum(rate(http_server_request_duration_seconds_count{job="checkout"}[__WINDOW__]))

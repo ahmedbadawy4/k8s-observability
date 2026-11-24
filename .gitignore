@@ -1,0 +1,11 @@
+.DS_Store
+*.swp
+
+# Local output of the CI steps
+rendered.yaml
+rules.yml
+
+# Never commit credentials or kubeconfigs
+*.kubeconfig
+kubeconfig
+.env

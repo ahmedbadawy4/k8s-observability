@@ -1,0 +1,58 @@
+// Grafana Alloy pipeline: OTLP in, metrics to Prometheus, traces to Tempo.
+//
+//   applications --OTLP--> otelcol.receiver.otlp
+//                              |
+//                       otelcol.processor.batch
+//                        |                 |
+//                  metrics            traces
+//                        |                 |
+//          otelcol.exporter.prometheus   otelcol.exporter.otlp "tempo"
+//                        |                 |
+//          prometheus.remote_write        Tempo
+//                        |
+//                    Prometheus
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// Convert OTLP metrics to Prometheus samples and push them to Prometheus.
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.kps.receiver]
+}
+
+prometheus.remote_write "kps" {
+  endpoint {
+    url = "http://kps-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+  }
+}
+
+// Forward traces to Tempo over OTLP gRPC. Plain text is fine inside the cluster
+// for this reference setup.
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo.monitoring.svc.cluster.local:4317"
+
+    tls {
+      insecure = true
+    }
+  }
+}

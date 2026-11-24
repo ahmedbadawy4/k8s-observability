@@ -1,0 +1,27 @@
+# Values for the Grafana Alloy chart.
+# The pipeline itself lives in alloy/config.alloy. The Makefile passes it in with
+#   --set-file alloy.configMap.content=alloy/config.alloy
+# The Makefile installs the chart as the release "alloy" in the namespace
+# "monitoring", so the Service is reachable as alloy.monitoring.svc:4317 (gRPC)
+# and :4318 (HTTP).
+
+controller:
+  # One gateway Deployment that receives OTLP from applications.
+  # The chart default is a DaemonSet.
+  type: deployment
+  replicas: 1
+
+alloy:
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi

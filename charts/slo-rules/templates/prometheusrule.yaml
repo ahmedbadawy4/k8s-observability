@@ -1,0 +1,66 @@
+{{- if .Values.slos }}
+{{- /*
+  Windows used by the recording rules. The alerts below need exactly these.
+  Burn rates and window pairs follow the multi-window, multi-burn-rate table in
+  the Google SRE Workbook (alerting on SLOs), for a 30 day objective window.
+*/ -}}
+{{- $windows := list "5m" "30m" "1h" "2h" "6h" "1d" "3d" }}
+{{- $burns := list
+      (dict "rate" "14.4" "long" "1h" "short" "5m"  "severity" .Values.alerting.pageSeverity)
+      (dict "rate" "6"    "long" "6h" "short" "30m" "severity" .Values.alerting.pageSeverity)
+      (dict "rate" "3"    "long" "1d" "short" "2h"  "severity" .Values.alerting.ticketSeverity)
+      (dict "rate" "1"    "long" "3d" "short" "6h"  "severity" .Values.alerting.ticketSeverity) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "slo-rules.fullname" . }}
+  labels:
+    {{- include "slo-rules.labels" . | nindent 4 }}
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    {{- range .Values.slos }}
+    {{- $slo := . }}
+    - name: slo-{{ $slo.name }}-recording
+      rules:
+        - record: slo:error_budget:ratio
+          expr: vector({{ $slo.errorBudget }})
+          labels:
+            slo: {{ $slo.name | quote }}
+            {{- with $slo.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- range $windows }}
+        - record: slo:sli_error:ratio_rate{{ . }}
+          expr: |-
+            {{- $slo.errorRatioQuery | replace "__WINDOW__" . | nindent 12 }}
+          labels:
+            slo: {{ $slo.name | quote }}
+            {{- with $slo.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- end }}
+    - name: slo-{{ $slo.name }}-alerts
+      rules:
+        {{- range $burn := $burns }}
+        - alert: SLOErrorBudgetBurn
+          expr: |-
+            slo:sli_error:ratio_rate{{ $burn.long }}{slo="{{ $slo.name }}"} > ({{ $burn.rate }} * {{ $slo.errorBudget }})
+            and
+            slo:sli_error:ratio_rate{{ $burn.short }}{slo="{{ $slo.name }}"} > ({{ $burn.rate }} * {{ $slo.errorBudget }})
+          labels:
+            severity: {{ $burn.severity | quote }}
+            burn_rate: {{ $burn.rate | quote }}
+            long_window: {{ $burn.long | quote }}
+            short_window: {{ $burn.short | quote }}
+            {{- with $slo.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ printf "SLO %s is using its error budget %sx faster than allowed" $slo.name $burn.rate | quote }}
+            description: {{ printf "%s The error ratio is above %sx the allowed budget over both %s and %s." ($slo.description | default $slo.name) $burn.rate $burn.long $burn.short | quote }}
+        {{- end }}
+    {{- end }}
+{{- end }}

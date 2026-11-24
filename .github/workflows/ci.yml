@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  chart-and-rules:
+    name: Helm chart, manifests and Prometheus rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.1
+
+      - name: Lint and render the slo-rules chart
+        run: |
+          helm lint charts/slo-rules
+          helm template slo charts/slo-rules > rendered.yaml
+
+      - name: Check the alert and recording rules with promtool
+        run: |
+          ruby -ryaml -e 'puts({"groups" => YAML.load_stream(File.read("rendered.yaml")).first["spec"]["groups"]}.to_yaml)' > rules.yml
+          docker run --rm -v "$PWD:/work:ro" --entrypoint promtool \
+            prom/prometheus:v3.5.0 check rules /work/rules.yml
+
+      - name: Validate the manifests with kubeconform
+        run: |
+          docker run --rm -v "$PWD:/work:ro" ghcr.io/yannh/kubeconform:v0.7.0 \
+            -strict -summary -kubernetes-version 1.33.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            /work/tempo/tempo.yaml /work/examples/telemetrygen.yaml /work/rendered.yaml
+
+  alloy-config:
+    name: Alloy configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate alloy/config.alloy
+        run: |
+          docker run --rm -v "$PWD/alloy:/cfg:ro" \
+            grafana/alloy:v1.22.0 validate /cfg/config.alloy

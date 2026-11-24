@@ -1,0 +1,10 @@
+apiVersion: v2
+name: slo-rules
+description: Prometheus recording rules and multi-window, multi-burn-rate alerts for service level objectives (SLOs).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - prometheus
+  - slo
+  - alerting
