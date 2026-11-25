@@ -125,3 +125,7 @@ This is a reference setup. A production setup would change at least these points
 - **No TLS and no authentication** between the components. Only the Grafana admin login is protected.
 - **No alert receiver.** Alerts show in Prometheus and Alertmanager. No notification target is configured.
 - **Local only.** The kind cluster has one node. Control plane scrape targets (etcd, scheduler, controller manager, kube-proxy) are turned off because kind does not expose them.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
